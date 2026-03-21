@@ -71,6 +71,8 @@ all:
 	$(OC) -O binary $(FW_NAME).elf $(FW_NAME).bin
 	$(SZ) $(FW_NAME).elf
 	./host/mkhdr.exe $(FW_NAME).bin
+	cp $(FW_NAME).bin $(FW_NAME)_enc.bin
+	./host/fwenc.exe $(FW_NAME)_enc.bin
 
 patch:
 	sed -i -e 's/CH58xBLE_LIB.H/CH58xBLE_LIB.h/g' \
