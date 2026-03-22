@@ -4,7 +4,7 @@ OD = $(CROSS_COMPILE)objdump
 OC = $(CROSS_COMPILE)objcopy
 SZ = $(CROSS_COMPILE)size
 
-FW_NAME ?= cdc-acm
+FW_NAME ?= ch582-usb-bridge
 
 CH583_SDK ?= ./EVT/EXAM/
 
@@ -58,6 +58,8 @@ CFLAGS += \
 
 SRCS += \
 	debug.c \
+	usbdev.c \
+	usbdev.h \
 	main.c \
 
 CFLAGS += \

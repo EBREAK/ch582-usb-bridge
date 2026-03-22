@@ -1,5 +1,6 @@
 #include "config.h"
 #include "HAL.h"
+#include "usbdev.h"
 #include "debug.h"
 
 __attribute__((aligned(4))) uint32_t MEM_BUF[BLE_MEMHEAP_SIZE / 4];
@@ -30,6 +31,7 @@ int main(void)
 	debug_puts((char *)VER_LIB);
 	debug_cr();
 	HAL_Init();
-	debug_puts("CH582 CDC ACM\r\n");
+	usbdev_init();
+	debug_puts("CH582 USB BRIDGE\r\n");
 	Main_Circulation();
 }
