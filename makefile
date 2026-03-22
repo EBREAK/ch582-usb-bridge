@@ -41,6 +41,8 @@ INCS += \
 LIBS += \
 	-L $(CH583_SDK)/SRC/StdPeriphDriver \
 	-lISP583 \
+	-L $(CH583_SDK)/BLE/LIB/ \
+	-lCH58xBLE \
 
 CFLAGS += \
 	-pipe \
@@ -64,8 +66,6 @@ SRCS += \
 
 CFLAGS += \
 	-DINT_SOFT \
-	-DCH58xBLE_ROM=1 \
-	-DLIB_FLASH_BASE_ADDRESSS=0x00040000 \
 
 all:
 	$(CC) $(CFLAGS) $(STARTUP_SCRIPT) $(INCS) $(SRCS) $(LIBS) -o $(FW_NAME).elf
@@ -87,9 +87,6 @@ patch:
 		$(CH583_SDK)/BLE/HAL/include/config.h
 	sed -i -e 's/ptrdiff_t/int32_t/g' \
 		$(CH583_SDK)/SRC/StdPeriphDriver/CH58x_sys.c 
-
-flash-ble-stack:
-	wlink flash $(CH583_SDK)/BLE/LIB/CH58xBLE_ROMx.hex
 
 flash:
 	wlink flash -a 0x8000 $(FW_NAME).bin

@@ -202,6 +202,4 @@ handle_reset:
 	la t0, main
 	csrw mepc, t0
 
-	j 0x40000
-
   mret
