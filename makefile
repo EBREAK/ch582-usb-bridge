@@ -61,7 +61,6 @@ CFLAGS += \
 SRCS += \
 	debug.c \
 	usbdev.c \
-	usbdev.h \
 	main.c \
 
 CFLAGS += \
