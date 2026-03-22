@@ -42,3 +42,16 @@ static inline bool fifo8_pop(struct fifo8 *fifo, uint8_t *c)
 	fifo->head = (current_head + 1) & fifo->mask;
 	return true;
 }
+
+static inline uint32_t fifo8_num_used(struct fifo8 *fifo)
+{
+        uint32_t head = fifo->head;
+        uint32_t tail = fifo->tail;
+        return (tail - head) & fifo->mask;
+}
+
+static inline uint32_t fifo8_num_free(struct fifo8 *fifo)
+{
+        uint32_t used = fifo8_num_used(fifo);
+        return fifo->mask - used;
+}

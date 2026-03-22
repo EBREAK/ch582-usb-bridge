@@ -1,28 +1,96 @@
 #include "usbdev.h"
+#include "config.h"
+#include "debug.h"
 
-void DevEP5_OUT_Deal(uint8_t l);
-uint8_t *pEP5_RAM_Addr;
-#define pEP5_OUT_DataBuf (pEP5_RAM_Addr)
-#define pEP5_IN_DataBuf (pEP5_RAM_Addr + 64)
+/*
+  CDC ACM 0
+  NOTIFACTION EP IN 0X83
+  DATA EP IN 0X81
+  DATA EP OUT 0X02
 
-#define EP6_GetINSta() (R8_UEP6_CTRL & UEP_T_RES_NAK)
-void DevEP6_OUT_Deal(uint8_t l);
-uint8_t *pEP6_RAM_Addr;
-#define pEP6_OUT_DataBuf (pEP6_RAM_Addr)
-#define pEP6_IN_DataBuf (pEP6_RAM_Addr + 64)
+  CDC ACM 1
+  NOTIFACTION EP IN 0X87
+  DATA EP IN 0X85
+  DATA EP OUT 0X06
+ */
 
-void DevEP6_IN_Deal(uint8_t l)
+volatile bool cdc_acm_0_h2d_pause = false;
+volatile uint32_t cdc_acm_0_h2d_total = 0;
+volatile uint32_t cdc_acm_0_d2h_total = 0;
+
+volatile bool cdc_acm_1_h2d_pause = false;
+volatile uint32_t cdc_acm_1_h2d_total = 0;
+volatile uint32_t cdc_acm_1_d2h_total = 0;
+
+#define USBDEV_ACM_0_H2D_BUFSIZE (0x1F + 1)
+
+__aligned(4) uint8_t usbdev_acm_0_h2d_fifo_buf[USBDEV_ACM_0_H2D_BUFSIZE];
+struct fifo8 usbdev_acm_0_h2d_fifo = {
+	.buf = &usbdev_acm_0_h2d_fifo_buf[0],
+	.mask = USBDEV_ACM_0_H2D_BUFSIZE - 1,
+	.head = 0,
+	.tail = 0,
+};
+
+#define USBDEV_ACM_0_D2H_BUFSIZE (0x1F + 1)
+
+__aligned(4) uint8_t usbdev_acm_0_d2h_fifo_buf[USBDEV_ACM_0_D2H_BUFSIZE];
+struct fifo8 usbdev_acm_0_d2h_fifo = {
+	.buf = &usbdev_acm_0_d2h_fifo_buf[0],
+	.mask = USBDEV_ACM_0_D2H_BUFSIZE - 1,
+	.head = 0,
+	.tail = 0,
+};
+
+#define USBDEV_ACM_1_H2D_BUFSIZE (0x7F + 1)
+
+__aligned(4) uint8_t usbdev_acm_1_h2d_fifo_buf[USBDEV_ACM_1_H2D_BUFSIZE];
+struct fifo8 usbdev_acm_1_h2d_fifo = {
+	.buf = &usbdev_acm_1_h2d_fifo_buf[0],
+	.mask = USBDEV_ACM_1_H2D_BUFSIZE - 1,
+	.head = 0,
+	.tail = 0,
+};
+
+#define USBDEV_ACM_1_D2H_BUFSIZE (0x7F + 1)
+
+__aligned(4) uint8_t usbdev_acm_1_d2h_fifo_buf[USBDEV_ACM_1_D2H_BUFSIZE];
+struct fifo8 usbdev_acm_1_d2h_fifo = {
+	.buf = &usbdev_acm_1_d2h_fifo_buf[0],
+	.mask = USBDEV_ACM_1_D2H_BUFSIZE - 1,
+	.head = 0,
+	.tail = 0,
+};
+
+void usbdev_show_stat(void)
 {
-	R8_UEP6_T_LEN = l;
-	R8_UEP6_CTRL = (R8_UEP6_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_ACK;
+	static uint32_t prev_time;
+	if ((TMOS_GetSystemClock() - prev_time) < 1600) {
+		return;
+	}
+	debug_puts("USBDEV CDC ACM 0 H2D TOTAL ");
+	debug_puthex(cdc_acm_0_h2d_total);
+	debug_puts(" D2H TOTAL ");
+	debug_puthex(cdc_acm_0_d2h_total);
+	debug_cr();
+	debug_puts("USBDEV CDC ACM 1 H2D TOTAL ");
+	debug_puthex(cdc_acm_1_h2d_total);
+	debug_puts(" D2H TOTAL ");
+	debug_puthex(cdc_acm_1_d2h_total);
+	debug_cr();
+	prev_time = TMOS_GetSystemClock();
 }
 
-#define EP7_GetINSta() (R8_UEP7_CTRL & UEP_T_RES_NAK)
-void DevEP7_OUT_Deal(uint8_t l);
-uint8_t *pEP7_RAM_Addr;
-#define pEP7_OUT_DataBuf (pEP7_RAM_Addr)
-#define pEP7_IN_DataBuf (pEP7_RAM_Addr + 64)
+#define EP5_GetINSta() (R8_UEP5_CTRL & UEP_T_RES_NAK)
+void DevEP5_IN_Deal(uint8_t l)
+{
+	R8_UEP5_T_LEN = l;
+	R8_UEP5_CTRL = (R8_UEP5_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_ACK;
+}
 
+void DevEP6_OUT_Deal(uint8_t len);
+
+#define EP7_GetINSta() (R8_UEP7_CTRL & UEP_T_RES_NAK)
 void DevEP7_IN_Deal(uint8_t l)
 {
 	R8_UEP7_T_LEN = l;
@@ -143,16 +211,16 @@ const uint8_t MyCfgDescr[] = {
 	0x05, // bDescriptorType: ENDPOINT (0x05)
 	0x81, // bEndpointAddress: IN端点 0x81
 	0x02, // bmAttributes: 批量端点
-	0x40,
-	0x00, // wMaxPacketSize: 64字节 (全速模式)
+	0x08,
+	0x00, // wMaxPacketSize: 8字节 (全速模式)
 	0x00, // bInterval: 忽略（批量端点）
 
 	0x07, // bLength: 7字节
 	0x05, // bDescriptorType: ENDPOINT (0x05)
 	0x02, // bEndpointAddress: OUT端点 0x02
 	0x02, // bmAttributes: 批量端点
-	0x40,
-	0x00, // wMaxPacketSize: 64字节
+	0x08,
+	0x00, // wMaxPacketSize: 8字节
 	0x00, // bInterval: 忽略
 
 	// ========== IAD for Second CDC ACM (interfaces 2 & 3) ==========
@@ -268,20 +336,15 @@ uint8_t Idle_Value[USB_INTERFACE_MAX_INDEX + 1] = { 0x00 };
 uint8_t USB_SleepStatus = 0x00; /* USB睡眠状态 */
 
 /******** 用户自定义分配端点RAM ****************************************/
-__attribute__((aligned(
-	4))) uint8_t EP0_Databuf[64 + 64 + 64]; //ep0(64)+ep4_out(64)+ep4_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP1_Databuf[64 + 64]; //ep1_out(64)+ep1_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP2_Databuf[64 + 64]; //ep2_out(64)+ep2_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP3_Databuf[64 + 64]; //ep3_out(64)+ep3_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP5_Databuf[64 + 64]; //ep5_out(64)+ep5_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP6_Databuf[64 + 64]; //ep6_out(64)+ep6_in(64)
-__attribute__((
-	aligned(4))) uint8_t EP7_Databuf[64 + 64]; //ep7_out(64)+ep7_in(64)
+__attribute__((aligned(4))) uint8_t EP0_Databuf[64];
+
+__attribute__((aligned(4))) uint8_t EP1_Databuf[64];
+__attribute__((aligned(4))) uint8_t EP2_Databuf[64];
+__attribute__((aligned(4))) uint8_t EP3_Databuf[64];
+
+__attribute__((aligned(4))) uint8_t EP5_Databuf[64];
+__attribute__((aligned(4))) uint8_t EP6_Databuf[64];
+__attribute__((aligned(4))) uint8_t EP7_Databuf[64];
 
 #define DEF_USB_SET_LINE_CODING 0x20
 #define DEF_USB_GET_LINE_CODING 0x21
@@ -347,12 +410,9 @@ void USB_DevTransProcess(void)
 			} break;
 
 			case UIS_TOKEN_OUT | 1: {
-				if (R8_USB_INT_ST &
-				    RB_UIS_TOG_OK) { // 不同步的数据包将丢弃
-					R8_UEP1_CTRL ^= RB_UEP_R_TOG;
-					len = R8_USB_RX_LEN;
-					DevEP1_OUT_Deal(len);
-				}
+				debug_puts("USBDEV FATAL: EP1 OUT\r\n");
+				while (1)
+					;
 			} break;
 
 			case UIS_TOKEN_IN | 1:
@@ -379,12 +439,9 @@ void USB_DevTransProcess(void)
 				break;
 
 			case UIS_TOKEN_OUT | 3: {
-				if (R8_USB_INT_ST &
-				    RB_UIS_TOG_OK) { // 不同步的数据包将丢弃
-					R8_UEP3_CTRL ^= RB_UEP_R_TOG;
-					len = R8_USB_RX_LEN;
-					DevEP3_OUT_Deal(len);
-				}
+				debug_puts("USBDEV FATAL: EP3 OUT\r\n");
+				while (1)
+					;
 			} break;
 
 			case UIS_TOKEN_IN | 3:
@@ -395,11 +452,9 @@ void USB_DevTransProcess(void)
 				break;
 
 			case UIS_TOKEN_OUT | 4: {
-				if (R8_USB_INT_ST & RB_UIS_TOG_OK) {
-					R8_UEP4_CTRL ^= RB_UEP_R_TOG;
-					len = R8_USB_RX_LEN;
-					DevEP4_OUT_Deal(len);
-				}
+				debug_puts("USBDEV FATAL: EP4 OUT\r\n");
+				while (1)
+					;
 			} break;
 
 			case UIS_TOKEN_IN | 4:
@@ -410,11 +465,9 @@ void USB_DevTransProcess(void)
 				break;
 
 			case UIS_TOKEN_OUT | 5: {
-				if (R8_USB_INT_ST & RB_UIS_TOG_OK) {
-					R8_UEP5_CTRL ^= RB_UEP_R_TOG;
-					len = R8_USB_RX_LEN;
-					DevEP5_OUT_Deal(len);
-				}
+				debug_puts("USBDEV FATAL: EP5 OUT\r\n");
+				while (1)
+					;
 			} break;
 
 			case UIS_TOKEN_IN | 5:
@@ -440,11 +493,9 @@ void USB_DevTransProcess(void)
 				break;
 
 			case UIS_TOKEN_OUT | 7: {
-				if (R8_USB_INT_ST & RB_UIS_TOG_OK) {
-					R8_UEP7_CTRL ^= RB_UEP_R_TOG;
-					len = R8_USB_RX_LEN;
-					DevEP7_OUT_Deal(len);
-				}
+				debug_puts("USBDEV FATAL: EP7 OUT\r\n");
+				while (1)
+					;
 			} break;
 
 			case UIS_TOKEN_IN | 7:
@@ -1040,7 +1091,7 @@ void USB_DevTransProcess(void)
 		R8_UEP1_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 		R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 		R8_UEP3_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-		R8_UEP4_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+		R8_UEP4_CTRL = UEP_R_RES_STALL | UEP_T_RES_STALL;
 		R8_UEP5_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 		R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 		R8_UEP7_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
@@ -1074,32 +1125,34 @@ void DevWakeup(void)
 	R16_PIN_ANALOG_IE |= RB_PIN_USB_DP_PU;
 }
 
-void DevEP1_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
+void DevEP2_OUT_Deal(uint8_t len)
+{
+	uint8_t idx = 0;
+	while (idx < len) {
+		fifo8_push(&usbdev_acm_0_h2d_fifo, EP2_Databuf[idx]);
+		idx += 1;
+	}
+
+	if (fifo8_num_free(&usbdev_acm_0_h2d_fifo) < 8) {
+		cdc_acm_0_h2d_pause = true;
+		R8_UEP2_CTRL = UEP_R_RES_NAK | UEP_T_RES_NAK;
+	}
+	cdc_acm_0_h2d_total += len;
 }
 
-void DevEP2_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
-}
+void DevEP6_OUT_Deal(uint8_t len)
+{
+	uint8_t idx = 0;
+	while (idx < len) {
+		fifo8_push(&usbdev_acm_1_h2d_fifo, EP6_Databuf[idx]);
+		idx += 1;
+	}
 
-void DevEP3_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
-}
-
-void DevEP4_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
-}
-
-void DevEP5_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
-}
-
-void DevEP6_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
-}
-
-void DevEP7_OUT_Deal(uint8_t l)
-{ /* 用户可自定义 */
+	if (fifo8_num_free(&usbdev_acm_1_h2d_fifo) < 64) {
+		cdc_acm_1_h2d_pause = true;
+		R8_UEP6_CTRL = UEP_R_RES_NAK | UEP_T_RES_NAK;
+	}
+	cdc_acm_1_h2d_total += len;
 }
 
 /*********************************************************************
@@ -1119,38 +1172,30 @@ void USB_IRQHandler(void) /* USB中断服务程序,使用寄存器组1 */
 void usbdev_init(void)
 {
 	pEP0_RAM_Addr = EP0_Databuf;
-	pEP1_RAM_Addr = EP1_Databuf;
-	pEP2_RAM_Addr = EP2_Databuf;
-	pEP3_RAM_Addr = EP3_Databuf;
-	pEP5_RAM_Addr = EP5_Databuf;
-	pEP6_RAM_Addr = EP6_Databuf;
-	pEP7_RAM_Addr = EP7_Databuf;
-
 	R8_USB_CTRL = 0x00; // 先设定模式,取消 RB_UC_CLR_ALL
 
-	R8_UEP4_1_MOD = RB_UEP4_RX_EN | RB_UEP4_TX_EN | RB_UEP1_RX_EN |
-			RB_UEP1_TX_EN; // 端点4 OUT+IN,端点1 OUT+IN
-	R8_UEP2_3_MOD = RB_UEP2_RX_EN | RB_UEP2_TX_EN | RB_UEP3_RX_EN |
-			RB_UEP3_TX_EN; // 端点2 OUT+IN,端点3 OUT+IN
-	R8_UEP567_MOD = RB_UEP5_TX_EN | RB_UEP5_RX_EN | RB_UEP6_TX_EN |
-			RB_UEP6_RX_EN | RB_UEP7_TX_EN | RB_UEP7_RX_EN;
+	R8_UEP4_1_MOD = RB_UEP1_TX_EN;
+	R8_UEP2_3_MOD = RB_UEP2_RX_EN | RB_UEP3_TX_EN;
+	R8_UEP567_MOD = RB_UEP5_TX_EN | RB_UEP6_RX_EN | RB_UEP7_TX_EN;
 
 	R16_UEP0_DMA = (uint16_t)(uint32_t)pEP0_RAM_Addr;
-	R16_UEP1_DMA = (uint16_t)(uint32_t)pEP1_RAM_Addr;
-	R16_UEP2_DMA = (uint16_t)(uint32_t)pEP2_RAM_Addr;
-	R16_UEP3_DMA = (uint16_t)(uint32_t)pEP3_RAM_Addr;
-	R16_UEP5_DMA = (uint16_t)(uint32_t)pEP5_RAM_Addr;
-	R16_UEP6_DMA = (uint16_t)(uint32_t)pEP6_RAM_Addr;
-	R16_UEP7_DMA = (uint16_t)(uint32_t)pEP7_RAM_Addr;
+
+	R16_UEP1_DMA = (uint16_t)(uint32_t)EP1_Databuf;
+	R16_UEP2_DMA = (uint16_t)(uint32_t)EP2_Databuf;
+	R16_UEP3_DMA = (uint16_t)(uint32_t)EP3_Databuf;
+
+	R16_UEP5_DMA = (uint16_t)(uint32_t)EP5_Databuf;
+	R16_UEP6_DMA = (uint16_t)(uint32_t)EP6_Databuf;
+	R16_UEP7_DMA = (uint16_t)(uint32_t)EP7_Databuf;
 
 	R8_UEP0_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-	R8_UEP1_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
-	R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
-	R8_UEP3_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
-	R8_UEP4_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
-	R8_UEP5_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
-	R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
-	R8_UEP7_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK | RB_UEP_AUTO_TOG;
+	R8_UEP1_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	R8_UEP3_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	R8_UEP4_CTRL = UEP_R_RES_STALL | UEP_T_RES_STALL;
+	R8_UEP5_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	R8_UEP7_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 
 	R8_USB_DEV_AD = 0x00;
 	R8_USB_CTRL =
@@ -1167,4 +1212,53 @@ void usbdev_init(void)
 
 void usbdev_task(void)
 {
+	int idx;
+	uint8_t c;
+#if 1
+	// ECHO TEST
+	while (fifo8_pop(&usbdev_acm_0_h2d_fifo, &c) &&
+	       (fifo8_num_free(&usbdev_acm_0_d2h_fifo) > 0)) {
+		fifo8_push(&usbdev_acm_0_d2h_fifo, c);
+	}
+	while (fifo8_pop(&usbdev_acm_1_h2d_fifo, &c) &&
+	       (fifo8_num_free(&usbdev_acm_1_d2h_fifo) > 0)) {
+		fifo8_push(&usbdev_acm_1_d2h_fifo, c);
+	}
+#endif
+	if (EP1_GetINSta()) {
+		idx = 0;
+		while (idx < 8) {
+			if (fifo8_pop(&usbdev_acm_0_d2h_fifo,
+				      &EP1_Databuf[idx]) == false) {
+				break;
+			}
+			idx += 1;
+		}
+		if (idx > 0) {
+			DevEP1_IN_Deal(idx);
+			cdc_acm_0_d2h_total += idx;
+		}
+	}
+	if (EP5_GetINSta()) {
+		idx = 0;
+		while (idx < 64) {
+			if (fifo8_pop(&usbdev_acm_1_d2h_fifo,
+				      &EP5_Databuf[idx]) == false) {
+				break;
+			}
+			idx += 1;
+		}
+		if (idx > 0) {
+			DevEP5_IN_Deal(idx);
+			cdc_acm_1_d2h_total += idx;
+		}
+	}
+	if ((fifo8_num_free(&usbdev_acm_0_h2d_fifo) > 8) &&
+	    (cdc_acm_0_h2d_pause == true)) {
+		R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	}
+	if ((fifo8_num_free(&usbdev_acm_1_h2d_fifo) > 64) &&
+	    (cdc_acm_1_h2d_pause == true)) {
+		R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	}
 }
