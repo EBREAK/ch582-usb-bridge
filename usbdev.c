@@ -17,10 +17,17 @@ void DevEP6_IN_Deal(uint8_t l)
 	R8_UEP6_CTRL = (R8_UEP6_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_ACK;
 }
 
+#define EP7_GetINSta() (R8_UEP7_CTRL & UEP_T_RES_NAK)
 void DevEP7_OUT_Deal(uint8_t l);
 uint8_t *pEP7_RAM_Addr;
 #define pEP7_OUT_DataBuf (pEP7_RAM_Addr)
 #define pEP7_IN_DataBuf (pEP7_RAM_Addr + 64)
+
+void DevEP7_IN_Deal(uint8_t l)
+{
+	R8_UEP7_T_LEN = l;
+	R8_UEP7_CTRL = (R8_UEP7_CTRL & ~MASK_UEP_T_RES) | UEP_T_RES_ACK;
+}
 
 #define DevEP0SIZE 0x40
 
@@ -40,8 +47,8 @@ const uint8_t MyDevDescr[] = {
 	0x02, // bDeviceSubClass (Common Class)
 	0x01, // bDeviceProtocol (IAD)
 	0x40, // bMaxPacketSize0 (64)
-	0x34, 0x12, // idVendor  (0x1234)
-	0x78, 0x56, // idProduct (0x5678)
+	0xAB, 0x89, // idVendor  (0x89AB)
+	0xCD, 0xEF, // idProduct (0xCDEF)
 	0x00, 0x01, // bcdDevice = 1.00
 	0x01, // iManufacturer
 	0x02, // iProduct
@@ -54,7 +61,7 @@ const uint8_t MyCfgDescr[] = {
 	// ========== Configuration Descriptor (9 bytes) ==========
 	0x09, // bLength: 描述符长度（9字节）
 	0x02, // bDescriptorType: CONFIGURATION (0x02)
-	0x82,
+	0x8D,
 	0x00, // wTotalLength: 配置描述符集合总长度 = 130 字节
 	0x04, // bNumInterfaces: 4个接口（0~3）
 	0x01, // bConfigurationValue: 配置编号（1）
@@ -148,71 +155,87 @@ const uint8_t MyCfgDescr[] = {
 	0x00, // wMaxPacketSize: 64字节
 	0x00, // bInterval: 忽略
 
-	// ========== HID Interface (Interface 2) ==========
-	// HID接口描述符
+	// ========== IAD for Second CDC ACM (interfaces 2 & 3) ==========
+	0x08, // bLength: 8字节
+	0x0B, // bDescriptorType: INTERFACE_ASSOCIATION (0x0B)
+	0x02, // bFirstInterface: 起始接口号 = 2
+	0x02, // bInterfaceCount: 关联的接口数 = 2
+	0x02, // bFunctionClass: 功能类 = 2 (CDC Communication)
+	0x02, // bFunctionSubClass: 子类 = 2 (ACM)
+	0x01, // bFunctionProtocol: 协议 = 1 (AT commands)
+	0x00, // iFunction: 字符串索引 (无)
+
+	// ========== CDC Communication Interface (Interface 2) ==========
 	0x09, // bLength: 9字节
 	0x04, // bDescriptorType: INTERFACE (0x04)
 	0x02, // bInterfaceNumber: 接口号 = 2
-	0x00, // bAlternateSetting: 0
-	0x02, // bNumEndpoints: 2个端点（IN/OUT）
-	0x03, // bInterfaceClass: HID (0x03)
-	0x00, // bInterfaceSubClass: 无引导协议
-	0x00, // bInterfaceProtocol: 无
-	0x00, // iInterface: 无字符串
+	0x00, // bAlternateSetting: 备用设置 = 0
+	0x01, // bNumEndpoints: 使用的端点数（1个通知端点）
+	0x02, // bInterfaceClass: 类 = 2 (CDC Communication)
+	0x02, // bInterfaceSubClass: 子类 = 2 (ACM)
+	0x01, // bInterfaceProtocol: 协议 = 1 (AT commands)
+	0x00, // iInterface: 字符串索引 (无)
 
-	// ---- HID Descriptor ----
+	// ---- CDC Functional Descriptors (CS_INTERFACE) ----
+	0x05, // bLength: 5字节
+	0x24, // bDescriptorType: CS_INTERFACE (0x24)
+	0x00, // bDescriptorSubtype: HEADER (0x00)
+	0x10,
+	0x01, // bcdCDC: CDC规范版本 = 1.10 (0x0110)
+
+	0x04, // bLength: 4字节
+	0x24, // bDescriptorType: CS_INTERFACE (0x24)
+	0x02, // bDescriptorSubtype: ACM (0x02)
+	0x02, // bmCapabilities: 支持设置线路编码、获取线路状态、发送控制信号
+
+	0x05, // bLength: 5字节
+	0x24, // bDescriptorType: CS_INTERFACE (0x24)
+	0x06, // bDescriptorSubtype: UNION (0x06)
+	0x02, // bMasterInterface: 主接口 = 2（通信接口）
+	0x03, // bSlaveInterface0: 从接口 = 3（数据接口）
+
+	0x05, // bLength: 5字节
+	0x24, // bDescriptorType: CS_INTERFACE (0x24)
+	0x01, // bDescriptorSubtype: CALL_MANAGEMENT (0x01)
+	0x01, // bmCapabilities: 设备处理呼叫管理
+	0x03, // bDataInterface: 数据接口编号 = 3
+
+	// ---- Notification Endpoint (0x87 IN) ----
+	0x07, // bLength: 7字节
+	0x05, // bDescriptorType: ENDPOINT (0x05)
+	0x87, // bEndpointAddress: IN端点 0x87
+	0x03, // bmAttributes: 中断端点
+	0x10,
+	0x00, // wMaxPacketSize: 16字节
+	0x01, // bInterval: 轮询间隔 = 1 ms
+
+	// ========== CDC Data Interface (Interface 3) ==========
 	0x09, // bLength: 9字节
-	0x21, // bDescriptorType: HID (0x21)
-	0x11,
-	0x01, // bcdHID: HID规范版本 = 1.11 (0x0111)
-	0x00, // bCountryCode: 国家代码（0 = 不支持）
-	0x01, // bNumDescriptors: 1个类描述符
-	0x22, // bDescriptorType: REPORT (0x22)
-	0x22,
-	0x00, // wDescriptorLength: 报告描述符长度 = 34字节 (0x0022)
+	0x04, // bDescriptorType: INTERFACE (0x04)
+	0x03, // bInterfaceNumber: 接口号 = 3
+	0x00, // bAlternateSetting: 备用设置 = 0
+	0x02, // bNumEndpoints: 2个端点（IN/OUT）
+	0x0A, // bInterfaceClass: 类 = 0x0A (CDC Data)
+	0x00, // bInterfaceSubClass: 子类 = 0
+	0x00, // bInterfaceProtocol: 协议 = 0
+	0x00, // iInterface: 字符串索引 (无)
 
-	// ---- HID Endpoints ----
+	// ---- Bulk Endpoints ----
 	0x07, // bLength: 7字节
 	0x05, // bDescriptorType: ENDPOINT (0x05)
-	0x84, // bEndpointAddress: IN端点 0x84
-	0x03, // bmAttributes: 中断端点
+	0x85, // bEndpointAddress: IN端点 0x85
+	0x02, // bmAttributes: 批量端点
 	0x40,
-	0x00, // wMaxPacketSize: 64字节
-	0x01, // bInterval: 轮询间隔 = 1 ms
+	0x00, // wMaxPacketSize: 64字节 (全速模式)
+	0x00, // bInterval: 忽略（批量端点）
 
 	0x07, // bLength: 7字节
 	0x05, // bDescriptorType: ENDPOINT (0x05)
-	0x05, // bEndpointAddress: OUT端点 0x05
-	0x03, // bmAttributes: 中断端点
+	0x06, // bEndpointAddress: OUT端点 0x06
+	0x02, // bmAttributes: 批量端点
 	0x40,
 	0x00, // wMaxPacketSize: 64字节
-	0x01, // bInterval: 轮询间隔 = 1 ms
-
-	0x09, // bLength
-	0x04, // bDescriptorType (Interface)
-	0x03, // bInterfaceNumber 3
-	0x00, // bAlternateSetting
-	0x02, // bNumEndpoints 2
-	0xFF, // bInterfaceClass
-	0xFF, // bInterfaceSubClass
-	0xFF, // bInterfaceProtocol
-	0x00, // iInterface (String Index)
-
-	0x07, // bLength
-	0x05, // bDescriptorType (Endpoint)
-	0x86, // bEndpointAddress (IN/D2H)
-	0x02, // bmAttributes (Bulk)
-	0x40,
-	0x00, // wMaxPacketSize 64
-	0x00, // bInterval 0 (unit depends on device speed)
-
-	0x07, // bLength
-	0x05, // bDescriptorType (Endpoint)
-	0x07, // bEndpointAddress (OUT/H2D)
-	0x02, // bmAttributes (Bulk)
-	0x40,
-	0x00, // wMaxPacketSize 64
-	0x00, // bInterval 0 (unit depends on device speed)
+	0x00, // bInterval: 忽略
 };
 
 // 语言描述符
@@ -230,49 +253,9 @@ const uint8_t MyManuInfo[] = {
 
 // 产品信息
 const uint8_t MyProdInfo[] = {
-	0x28, 0x03, // bLength = 40, bDescriptorType = 0x03
-	'C',  0, // "C"
-	'H',  0, // "H"
-	'5',  0, // "5"
-	'8',  0, // "8"
-	'2',  0, // "2"
-	' ',  0, // " "
-	'K',  0, // "K"
-	'E',  0, // "E"
-	'R',  0, // "R"
-	'M',  0, // "M"
-	'I',  0, // "I"
-	'T',  0, // "T"
-	' ',  0, // " "
-	'L',  0, // "L"
-	'O',  0, // "O"
-	'A',  0, // "A"
-	'D',  0, // "D"
-	'E',  0, // "E"
-	'R',  0 // "R"
-};
-
-/*HID类报表描述符*/
-
-const uint8_t hid_report_descriptor[] = {
-	0x06, 0x00, 0xFF, // Usage Page (Vendor Defined 0xFF00)
-	0x09, 0x01, // Usage (0x01)
-	0xA1, 0x01, // Collection (Application)
-	0x09, 0x02, //   Usage (0x02)
-	0x15, 0x00, //   Logical Minimum (0)
-	0x26, 0x00, 0xFF, //   Logical Maximum (-256)
-	0x75, 0x08, //   Report Size (8)
-	0x95, 0x40, //   Report Count (64)
-	0x81, 0x06, //   Input (Data,Var,Rel,No Wrap,Linear,Preferred State,No Null Position)
-	0x09, 0x02, //   Usage (0x02)
-	0x15, 0x00, //   Logical Minimum (0)
-	0x26, 0x00, 0xFF, //   Logical Maximum (-256)
-	0x75, 0x08, //   Report Size (8)
-	0x95, 0x40, //   Report Count (64)
-	0x91, 0x06, //   Output (Data,Var,Rel,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-	0xC0, // End Collection
-
-	// 34 bytes
+	0x22, 0x03, 'C', 0, 'H', 0, '5', 0, '8', 0, '2', 0,
+	' ',  0,    'U', 0, 'S', 0, 'B', 0, ' ', 0, 'B', 0,
+	'R',  0,    'I', 0, 'D', 0, 'G', 0, 'E', 0,
 };
 
 /**********************************************************/
@@ -554,44 +537,6 @@ void USB_DevTransProcess(void)
 					case USB_DESCR_TYP_CONFIG: {
 						pDescr = MyCfgDescr;
 						len = MyCfgDescr[2];
-					} break;
-
-					case USB_DESCR_TYP_HID:
-						switch ((pSetupReqPak->wIndex) &
-							0xff) {
-						/* 选择接口 */
-						case 0:
-							pDescr =
-								(uint8_t *)(&MyCfgDescr
-										    [18]);
-							len = 9;
-							break;
-
-						case 1:
-							pDescr =
-								(uint8_t *)(&MyCfgDescr
-										    [43]);
-							len = 9;
-							break;
-
-						default:
-							/* 不支持的字符串描述符 */
-							errflag = 0xff;
-							break;
-						}
-						break;
-
-					case USB_DESCR_TYP_REPORT: {
-						if (((pSetupReqPak->wIndex) &
-						     0xff) ==
-						    2) //接口2报表描述符
-						{
-							pDescr =
-								hid_report_descriptor;
-							len = sizeof(
-								hid_report_descriptor);
-						} else
-							len = 0xff;
 					} break;
 
 					case USB_DESCR_TYP_STRING: {
@@ -1129,120 +1074,25 @@ void DevWakeup(void)
 	R16_PIN_ANALOG_IE |= RB_PIN_USB_DP_PU;
 }
 
-/*********************************************************************
- * @fn      DevEP1_OUT_Deal
- *
- * @brief   端点1数据处理
- *
- * @return  none
- */
 void DevEP1_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
 }
 
-__aligned(4) uint8_t usbdev_acm_rxfifo_buf[128];
-struct fifo8 usbdev_acm_rxfifo = {
-	.buf = &usbdev_acm_rxfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
-
-__aligned(4) uint8_t usbdev_acm_txfifo_buf[128];
-struct fifo8 usbdev_acm_txfifo = {
-	.buf = &usbdev_acm_txfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
-
-/*********************************************************************
- * @fn      DevEP2_OUT_Deal
- *
- * @brief   端点2数据处理
- *
- * @return  none
- */
 void DevEP2_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
-	uint8_t i;
-
-	for (i = 0; i < l; i++) {
-		fifo8_push(&usbdev_acm_rxfifo, pEP2_OUT_DataBuf[i]);
-	}
 }
 
-/*********************************************************************
- * @fn      DevEP3_OUT_Deal
- *
- * @brief   端点3数据处理
- *
- * @return  none
- */
 void DevEP3_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
 }
 
-__aligned(4) uint8_t usbdev_hid_rxfifo_buf[128];
-struct fifo8 usbdev_hid_rxfifo = {
-	.buf = &usbdev_hid_rxfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
-
-__aligned(4) uint8_t usbdev_hid_txfifo_buf[128];
-struct fifo8 usbdev_hid_txfifo = {
-	.buf = &usbdev_hid_txfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
-
-/*********************************************************************
- * @fn      DevEP4_OUT_Deal
- *
- * @brief   端点4数据处理
- *
- * @return  none
- */
 void DevEP4_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
 }
 
 void DevEP5_OUT_Deal(uint8_t l)
-
 { /* 用户可自定义 */
-	uint8_t i;
-	if (l == 0) {
-		return;
-	}
-	uint8_t payload_len;
-	payload_len = pEP5_OUT_DataBuf[0];
-	if (payload_len > 63) {
-		payload_len = 63;
-	}
-	for (i = 0; i < payload_len; i++) {
-		fifo8_push(&usbdev_hid_rxfifo, pEP5_OUT_DataBuf[1 + i]);
-		//debug_putc(pEP5_OUT_DataBuf[1 + i]);
-	}
 }
-
-__aligned(4) uint8_t usbdev_vendor_rxfifo_buf[128];
-struct fifo8 usbdev_vendor_rxfifo = {
-	.buf = &usbdev_vendor_rxfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
-
-__aligned(4) uint8_t usbdev_vendor_txfifo_buf[128];
-struct fifo8 usbdev_vendor_txfifo = {
-	.buf = &usbdev_vendor_txfifo_buf[0],
-	.mask = 128 - 1,
-	.head = 0,
-	.tail = 0,
-};
 
 void DevEP6_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
@@ -1250,11 +1100,6 @@ void DevEP6_OUT_Deal(uint8_t l)
 
 void DevEP7_OUT_Deal(uint8_t l)
 { /* 用户可自定义 */
-	uint8_t i;
-
-	for (i = 0; i < l; i++) {
-		fifo8_push(&usbdev_vendor_rxfifo, pEP7_OUT_DataBuf[i]);
-	}
 }
 
 /*********************************************************************
@@ -1273,13 +1118,6 @@ void USB_IRQHandler(void) /* USB中断服务程序,使用寄存器组1 */
 
 void usbdev_init(void)
 {
-	fifo8_reset(&usbdev_acm_rxfifo);
-	fifo8_reset(&usbdev_acm_txfifo);
-	fifo8_reset(&usbdev_hid_rxfifo);
-	fifo8_reset(&usbdev_hid_txfifo);
-	fifo8_reset(&usbdev_vendor_rxfifo);
-	fifo8_reset(&usbdev_vendor_txfifo);
-
 	pEP0_RAM_Addr = EP0_Databuf;
 	pEP1_RAM_Addr = EP1_Databuf;
 	pEP2_RAM_Addr = EP2_Databuf;
@@ -1327,73 +1165,6 @@ void usbdev_init(void)
 	PFIC_EnableIRQ(USB_IRQn);
 }
 
-void usbdev_acm_send(uint8_t *buf, int len)
-{
-	while (len > 0) {
-		fifo8_push(&usbdev_acm_txfifo, buf[0]);
-		buf += 1;
-		len -= 1;
-	}
-}
-
-void usbdev_hid_send(uint8_t *buf, int len)
-{
-	while (len > 0) {
-		fifo8_push(&usbdev_hid_txfifo, buf[0]);
-		buf += 1;
-		len -= 1;
-	}
-}
-
-void usbdev_vendor_send(uint8_t *buf, int len)
-{
-	while (len > 0) {
-		fifo8_push(&usbdev_vendor_txfifo, buf[0]);
-		buf += 1;
-		len -= 1;
-	}
-}
-
 void usbdev_task(void)
 {
-	int i;
-	uint8_t c;
-	if (EP1_GetINSta()) {
-		i = 0;
-		while (i < 63) {
-			if (fifo8_pop(&usbdev_acm_txfifo,
-				      &pEP1_IN_DataBuf[i]) == false) {
-				break;
-			}
-			i += 1;
-		}
-		DevEP1_IN_Deal(i);
-	}
-
-	if (EP4_GetINSta()) {
-		i = 0;
-		while (i < 63) {
-			if (fifo8_pop(&usbdev_hid_txfifo,
-				      &pEP4_IN_DataBuf[1 + i]) == false) {
-				break;
-			}
-			i += 1;
-		}
-		pEP4_IN_DataBuf[0] = i;
-		if (i != 0) {
-			// DONT FLOOD USB HOST
-			DevEP4_IN_Deal(64);
-		}
-	}
-	if (EP6_GetINSta()) {
-		i = 0;
-		while (i < 63) {
-			if (fifo8_pop(&usbdev_vendor_txfifo,
-				      &pEP6_IN_DataBuf[i]) == false) {
-				break;
-			}
-			i += 1;
-		}
-		DevEP6_IN_Deal(i);
-	}
 }
