@@ -197,7 +197,7 @@ int main(int argc, char *argv[])
 	if ((file_size & 0xF) != 0) {
 		printf("FW SIZE IS NOT ALIGN WITH 16\n");
 		file_size += 15;
-		file_size &= file_size - 16;
+		file_size &= -16;
 		printf("NEW FW SIZE: %d 0x%08X\n", file_size, file_size);
 	}
 	idx = 0;
