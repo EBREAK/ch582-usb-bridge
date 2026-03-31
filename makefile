@@ -60,7 +60,10 @@ CFLAGS += \
 
 SRCS += \
 	debug.c \
+	uart.c \
 	usbdev.c \
+	forth.c \
+	FORTH_DICT.S \
 	main.c \
 
 CFLAGS += \
@@ -68,7 +71,7 @@ CFLAGS += \
 
 all:
 	$(CC) $(CFLAGS) $(STARTUP_SCRIPT) $(INCS) $(SRCS) $(LIBS) -o $(FW_NAME).elf
-	$(OD) -l -F -S -d $(FW_NAME).elf > $(FW_NAME).dis
+	$(OD) -l -F -S -D $(FW_NAME).elf > $(FW_NAME).dis
 	$(OC) -O binary $(FW_NAME).elf $(FW_NAME).bin
 	$(SZ) $(FW_NAME).elf
 	./host/mkhdr.exe $(FW_NAME).bin

@@ -1,6 +1,8 @@
 #include "config.h"
 #include "HAL.h"
+#include "uart.h"
 #include "usbdev.h"
+#include "forth.h"
 #include "main.h"
 #include "debug.h"
 
@@ -13,6 +15,7 @@ __attribute__((noinline)) void Main_Circulation()
 {
 	while (1) {
 		TMOS_SystemProcess();
+		uart_task();
 		usbdev_task();
 	}
 }
@@ -32,13 +35,19 @@ uint16_t Main_ProcessEvent(uint8_t task_id, uint16_t events)
 
 	if (events & MAIN_EVT_START) {
 		tmos_start_task(main_taskid, MAIN_EVT_PERIODIC1S, 1600);
+		tmos_start_task(main_taskid, MAIN_EVT_FORTH, 1);
 		return (events ^ MAIN_EVT_START);
 	}
 
 	if (events & MAIN_EVT_PERIODIC1S) {
-		usbdev_show_stat();
+		//usbdev_show_stat();
 		tmos_start_task(main_taskid, MAIN_EVT_PERIODIC1S, 1600);
 		return (events ^ MAIN_EVT_PERIODIC1S);
+	}
+
+	if (events & MAIN_EVT_FORTH) {
+		forth_run(&forth_root);
+		return (events ^ MAIN_EVT_FORTH);
 	}
 
 	return 0;
@@ -61,7 +70,9 @@ int main(void)
 	debug_puts((char *)VER_LIB);
 	debug_cr();
 	HAL_Init();
+	uart_init();
 	usbdev_init();
+	forth_init();
 	debug_puts("CH582 USB BRIDGE\r\n");
 	main_taskid = TMOS_ProcessEventRegister(Main_ProcessEvent);
 	tmos_set_event(main_taskid, MAIN_EVT_START);
