@@ -913,7 +913,22 @@ forth_wait_acm1_key:
 		fctx->tos = 0;
 		fifo8_pop(&usbdev_acm_1_h2d_fifo, (uint8_t *)&fctx->tos);
 		break;
-
+	case F_SW_RESET:
+		PFIC_SystemReset();
+		while (1)
+			;
+		break;
+	case F_PW_RESET:
+		FLASH_ROM_SW_RESET();
+		sys_safe_access_enable();
+		R16_INT32K_TUNE = 0xFFFF;
+		sys_safe_access_disable();
+		sys_safe_access_enable();
+		R8_RST_WDOG_CTRL |= RB_SOFTWARE_RESET;
+		sys_safe_access_disable();
+		while (1)
+			;
+		break;
 	default:
 		debug_puts("INVALID OPCODE\r\n");
 		goto forth_halt;

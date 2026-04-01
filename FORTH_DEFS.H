@@ -139,4 +139,7 @@
 #define F_ACM1_KEY 0X72
 #define F_ACM1_EMIT 0x73
 
+#define F_SW_RESET 0X74
+#define F_PW_RESET 0x75
+
 #endif
