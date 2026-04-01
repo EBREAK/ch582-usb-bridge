@@ -1,6 +1,8 @@
 #include "usbdev.h"
 #include "config.h"
 #include "debug.h"
+#include "main.h"
+#include "forth.h"
 
 /*
   CDC ACM 0
@@ -1214,7 +1216,7 @@ void usbdev_task(void)
 {
 	int idx;
 	uint8_t c;
-#if 1
+#if 0
 	// ECHO TEST
 	while (fifo8_pop(&usbdev_acm_0_h2d_fifo, &c) &&
 	       (fifo8_num_free(&usbdev_acm_0_d2h_fifo) > 0)) {
@@ -1239,6 +1241,7 @@ void usbdev_task(void)
 			cdc_acm_0_d2h_total += idx;
 		}
 	}
+
 	if (EP5_GetINSta()) {
 		idx = 0;
 		while (idx < 64) {
@@ -1262,5 +1265,25 @@ void usbdev_task(void)
 	    (cdc_acm_1_h2d_pause == true)) {
 		cdc_acm_1_h2d_pause = false;
 		R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+	}
+	if (fifo8_num_used(&usbdev_acm_0_h2d_fifo) > 0) {
+		if (forth_root.wait_state == FORTH_WAIT_ACM0_KEY) {
+			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		}
+	}
+	if (fifo8_num_free(&usbdev_acm_0_d2h_fifo) > 0) {
+		if (forth_root.wait_state == FORTH_WAIT_ACM0_EMIT) {
+			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		}
+	}
+	if (fifo8_num_used(&usbdev_acm_1_h2d_fifo) > 0) {
+		if (forth_root.wait_state == FORTH_WAIT_ACM1_KEY) {
+			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		}
+	}
+	if (fifo8_num_free(&usbdev_acm_1_d2h_fifo) > 0) {
+		if (forth_root.wait_state == FORTH_WAIT_ACM1_EMIT) {
+			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		}
 	}
 }

@@ -134,4 +134,9 @@
 #define F_BLENLOAD 0X6D
 #define F_BLENSTORE 0X6E
 
+#define F_ACM0_KEY 0X70
+#define F_ACM0_EMIT 0x71
+#define F_ACM1_KEY 0X72
+#define F_ACM1_EMIT 0x73
+
 #endif

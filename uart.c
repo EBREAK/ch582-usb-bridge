@@ -14,16 +14,15 @@ struct fifo8 uart1_rxfifo = {
 	.tail = 0,
 };
 
-
 void uart_task(void)
 {
-	if (fifo8_num_used(&uart1_rxfifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_EARLY_KEY) {
+	if (R8_UART1_TFC == 0) {
+		if (forth_root.wait_state == FORTH_WAIT_EARLY_EMIT) {
 			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
 		}
 	}
-	if (R8_UART1_TFC == 0) {
-		if (forth_root.wait_state == FORTH_WAIT_EARLY_EMIT) {
+	if (fifo8_num_used(&uart1_rxfifo) > 0) {
+		if (forth_root.wait_state == FORTH_WAIT_EARLY_KEY) {
 			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
 		}
 	}

@@ -1,6 +1,7 @@
 #include "forth.h"
 #include "debug.h"
 #include "uart.h"
+#include "usbdev.h"
 
 #include <CH58x_common.h>
 #include <ctype.h>
@@ -858,6 +859,61 @@ forth_wait_early_key:
 		*(uint8_t *)(xt2addr(fctx->tos) - 3) = (utmp0 & 0x7F) >> 1;
 		fctx->tos = forth_ppop(fctx);
 		break;
+	case F_ACM0_EMIT:
+forth_wait_acm0_emit:
+		if (fifo8_num_free(&usbdev_acm_0_d2h_fifo) == 0) {
+			//debug_puts("NO EMIT");
+			fctx->wait_state = FORTH_WAIT_ACM0_EMIT;
+			fctx->save = &&forth_wait_acm0_emit;
+			return;
+		}
+		fctx->wait_state = 0;
+		fctx->save = NULL;
+		fifo8_push(&usbdev_acm_0_d2h_fifo, fctx->tos);
+		fctx->tos = forth_ppop(fctx);
+		break;
+	case F_ACM0_KEY:
+forth_wait_acm0_key:
+		if (fifo8_num_used(&usbdev_acm_0_h2d_fifo) == 0) {
+			//debug_puts("NO KEY");
+			fctx->wait_state = FORTH_WAIT_ACM0_KEY;
+			fctx->save = &&forth_wait_acm0_key;
+			return;
+		}
+		fctx->wait_state = 0;
+		fctx->save = NULL;
+		forth_ppush(fctx, fctx->tos);
+		fctx->tos = 0;
+		fifo8_pop(&usbdev_acm_0_h2d_fifo, (uint8_t *)&fctx->tos);
+		break;
+	case F_ACM1_EMIT:
+forth_wait_acm1_emit:
+		if (fifo8_num_free(&usbdev_acm_1_d2h_fifo) == 0) {
+			//debug_puts("NO EMIT");
+			fctx->wait_state = FORTH_WAIT_ACM1_EMIT;
+			fctx->save = &&forth_wait_acm1_emit;
+			return;
+		}
+		fctx->wait_state = 0;
+		fctx->save = NULL;
+		fifo8_push(&usbdev_acm_1_d2h_fifo, fctx->tos);
+		fctx->tos = forth_ppop(fctx);
+		break;
+	case F_ACM1_KEY:
+forth_wait_acm1_key:
+		if (fifo8_num_used(&usbdev_acm_1_h2d_fifo) == 0) {
+			//debug_puts("NO KEY");
+			fctx->wait_state = FORTH_WAIT_ACM1_KEY;
+			fctx->save = &&forth_wait_acm1_key;
+			return;
+		}
+		fctx->wait_state = 0;
+		fctx->save = NULL;
+		forth_ppush(fctx, fctx->tos);
+		fctx->tos = 0;
+		fifo8_pop(&usbdev_acm_1_h2d_fifo, (uint8_t *)&fctx->tos);
+		break;
+
 	default:
 		debug_puts("INVALID OPCODE\r\n");
 		goto forth_halt;
