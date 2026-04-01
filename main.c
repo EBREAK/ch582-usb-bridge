@@ -40,7 +40,7 @@ uint16_t Main_ProcessEvent(uint8_t task_id, uint16_t events)
 	}
 
 	if (events & MAIN_EVT_PERIODIC1S) {
-		//usbdev_show_stat();
+		usbdev_show_stat();
 		tmos_start_task(main_taskid, MAIN_EVT_PERIODIC1S, 1600);
 		return (events ^ MAIN_EVT_PERIODIC1S);
 	}
