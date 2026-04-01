@@ -2,7 +2,10 @@
 #include "uart.h"
 #include "fifo8.h"
 #include "forth.h"
+#include "usbdev.h"
+#include "debug.h"
 #include "config.h"
+
 
 static int uart1_trig_bytes = 4;
 
@@ -16,23 +19,33 @@ struct fifo8 uart1_rxfifo = {
 
 static int uart0_trig_bytes = 4;
 
-__aligned(4) uint8_t uart0_rxfifo_buf[256];
+__aligned(4) uint8_t uart0_rxfifo_buf[1024];
 struct fifo8 uart0_rxfifo = {
 	.buf = &uart0_rxfifo_buf[0],
-	.mask = 256 - 1,
+	.mask = 1024 - 1,
 	.head = 0,
 	.tail = 0,
 };
 
-__aligned(4) uint8_t uart0_txfifo_buf[256];
-struct fifo8 uart0_txfifo = {
-	.buf = &uart0_txfifo_buf[0],
-	.mask = 256 - 1,
-	.head = 0,
-	.tail = 0,
-};
+void uart0_task(void)
+{
+	uint8_t c = 0;
+	if (usbdev_acm_1_mode == USBDEV_ACM1_MODE_UART0) {
+		while ((R8_UART0_TFC < 4) &&
+		    (fifo8_num_used(&usbdev_acm_1_h2d_fifo) > 0)) {
+			fifo8_pop(&usbdev_acm_1_h2d_fifo, &c);
+			R8_UART0_THR = c;
+		}
+		while ((fifo8_num_free(&usbdev_acm_1_d2h_fifo) > 0) &&
+		       (fifo8_num_used(&uart0_rxfifo) > 0)) {
+			fifo8_pop(&uart0_rxfifo, &c);
+			fifo8_push(&usbdev_acm_1_d2h_fifo, c);
+		}
+		return;
+	}
+}
 
-void uart_task(void)
+void uart1_task(void)
 {
 	if (R8_UART1_TFC == 0) {
 		if (forth_root.wait_state == FORTH_WAIT_EARLY_EMIT) {
@@ -44,6 +57,12 @@ void uart_task(void)
 			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
 		}
 	}
+}
+
+void uart_task(void)
+{
+	uart0_task();
+	uart1_task();
 }
 
 void uart_init(void)
@@ -68,12 +87,11 @@ void uart_init(void)
 	  CTS: PB0
 	 */
 	fifo8_reset(&uart0_rxfifo);
-	fifo8_reset(&uart0_txfifo);
 	GPIOB_SetBits(bTXD0);
 	GPIOB_ModeCfg(bTXD0, GPIO_ModeOut_PP_5mA);
 	GPIOB_ModeCfg(bRXD0, GPIO_ModeIN_PU);
 	GPIOB_ModeCfg(bRTS, GPIO_ModeOut_PP_5mA);
-	GPIOB_ModeCfg(bCTS, GPIO_ModeIN_PU);
+	GPIOB_ModeCfg(bCTS, GPIO_ModeIN_PD);
 	UART0_BaudRateCfg(1200);
 	R8_UART0_MCR |= RB_MCR_AU_FLOW_EN;
 	R8_UART0_FCR = (2 << 6) | RB_FCR_TX_FIFO_CLR | RB_FCR_RX_FIFO_CLR |

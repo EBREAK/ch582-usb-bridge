@@ -16,6 +16,9 @@
   DATA EP OUT 0X06
  */
 
+
+volatile uint32_t usbdev_acm_1_mode = USBDEV_ACM1_MODE_UART0;
+
 volatile bool cdc_acm_0_h2d_pause = false;
 volatile uint32_t cdc_acm_0_h2d_total = 0;
 volatile uint32_t cdc_acm_0_d2h_total = 0;
