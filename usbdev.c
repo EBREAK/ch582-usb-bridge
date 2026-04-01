@@ -1255,10 +1255,12 @@ void usbdev_task(void)
 	}
 	if ((fifo8_num_free(&usbdev_acm_0_h2d_fifo) > 8) &&
 	    (cdc_acm_0_h2d_pause == true)) {
+		cdc_acm_0_h2d_pause = false;
 		R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 	}
 	if ((fifo8_num_free(&usbdev_acm_1_h2d_fifo) > 64) &&
 	    (cdc_acm_1_h2d_pause == true)) {
+		cdc_acm_1_h2d_pause = false;
 		R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
 	}
 }
