@@ -1262,7 +1262,8 @@ void DevEP2_OUT_Deal(uint8_t len)
 
 	if (fifo8_num_free(&usbdev_acm_0_h2d_fifo) < 8) {
 		cdc_acm_0_h2d_pause = true;
-		R8_UEP2_CTRL = UEP_R_RES_NAK | UEP_T_RES_NAK;
+		R8_UEP2_CTRL &= ~UEP_R_RES_STALL;
+		R8_UEP2_CTRL |= UEP_R_RES_NAK;
 	}
 	cdc_acm_0_h2d_total += len;
 }
@@ -1277,7 +1278,8 @@ void DevEP6_OUT_Deal(uint8_t len)
 
 	if (fifo8_num_free(&usbdev_acm_1_h2d_fifo) < 64) {
 		cdc_acm_1_h2d_pause = true;
-		R8_UEP6_CTRL = UEP_R_RES_NAK | UEP_T_RES_NAK;
+		R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
+		R8_UEP6_CTRL |= UEP_R_RES_NAK;
 	}
 	cdc_acm_1_h2d_total += len;
 }
@@ -1394,12 +1396,14 @@ void usbdev_task(void)
 	if ((fifo8_num_free(&usbdev_acm_0_h2d_fifo) > 8) &&
 	    (cdc_acm_0_h2d_pause == true)) {
 		cdc_acm_0_h2d_pause = false;
-		R8_UEP2_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+		R8_UEP2_CTRL &= ~UEP_R_RES_STALL;
+		R8_UEP2_CTRL |= UEP_R_RES_ACK;
 	}
 	if ((fifo8_num_free(&usbdev_acm_1_h2d_fifo) > 64) &&
 	    (cdc_acm_1_h2d_pause == true)) {
 		cdc_acm_1_h2d_pause = false;
-		R8_UEP6_CTRL = UEP_R_RES_ACK | UEP_T_RES_NAK;
+		R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
+		R8_UEP6_CTRL |= UEP_R_RES_ACK;
 	}
 	if (fifo8_num_used(&usbdev_acm_0_h2d_fifo) > 0) {
 		if (forth_root.wait_state == FORTH_WAIT_ACM0_KEY) {
