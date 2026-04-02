@@ -16,6 +16,20 @@
   DATA EP OUT 0X06
  */
 
+// 线路编码结构体，符合CDC规范
+struct cdc_line_coding {
+	uint32_t dwDTERate; // 波特率
+	uint8_t bCharFormat; // 停止位：0-1位，1-1.5位，2-2位
+	uint8_t bParityType; // 校验：0-无，1-奇，2-偶，3-标记，4-空间
+	uint8_t bDataBits; // 数据位：5,6,7,8,16
+} __attribute__((packed));
+
+// 为两个CDC ACM接口分别存储线路编码参数
+static struct cdc_line_coding usbdev_acm_0_line_coding;
+static struct cdc_line_coding usbdev_acm_1_line_coding;
+
+// 用于标记SET_LINE_CODING请求的待处理接口（0xFF表示无待处理）
+volatile uint8_t usbdev_set_line_coding_pending = 0xFF;
 
 volatile uint32_t usbdev_acm_1_mode = USBDEV_ACM1_MODE_UART0;
 
@@ -412,6 +426,94 @@ void USB_DevTransProcess(void)
 
 			case UIS_TOKEN_OUT: {
 				len = R8_USB_RX_LEN;
+				switch (usbdev_set_line_coding_pending) {
+				case 0:
+					memcpy(&usbdev_acm_0_line_coding,
+					       pEP0_DataBuf, 7);
+					break;
+				case 2:
+					memcpy(&usbdev_acm_1_line_coding,
+					       pEP0_DataBuf, 7);
+					if (usbdev_acm_1_mode ==
+					    USBDEV_ACM1_MODE_UART0) {
+						UART0_BaudRateCfg(
+							usbdev_acm_1_line_coding
+								.dwDTERate);
+						switch (usbdev_acm_1_line_coding
+								.bCharFormat) {
+						case 0:
+						case 1:
+							R8_UART0_LCR &= ~(
+								RB_LCR_STOP_BIT);
+							break;
+						case 2:
+							R8_UART0_LCR |=
+								(RB_LCR_STOP_BIT);
+							break;
+						}
+						switch (usbdev_acm_1_line_coding
+								.bParityType) {
+						case 0:
+							R8_UART0_LCR &= ~(
+								((0b11) << 4) |
+								(0b1 << 3));
+							break;
+						case 1:
+							R8_UART0_LCR |=
+								(1 << 3);
+							R8_UART0_LCR &= ~(
+								((0b11) << 4));
+							break;
+						case 2:
+							R8_UART0_LCR |=
+								(1 << 3);
+							R8_UART0_LCR &= ~(
+								((0b11) << 4));
+							SAFEOPERATE;
+							R8_UART0_LCR |=
+								(0b01 << 4);
+							break;
+						case 3:
+							R8_UART0_LCR |=
+								(1 << 3);
+							R8_UART0_LCR &= ~(
+								((0b11) << 4));
+							SAFEOPERATE;
+							R8_UART0_LCR |=
+								(0b10 << 4);
+							break;
+						case 4:
+							R8_UART0_LCR |=
+								(1 << 3);
+							R8_UART0_LCR &= ~(
+								((0b11) << 4));
+							SAFEOPERATE;
+							R8_UART0_LCR |=
+								(0b11 << 4);
+							break;
+						}
+						switch (usbdev_acm_1_line_coding
+								.bDataBits) {
+						case 5:
+							R8_UART0_LCR &= ~(0b11);
+							break;
+						case 6:
+							R8_UART0_LCR &= ~(0b11);
+							SAFEOPERATE;
+							R8_UART0_LCR |= (0b01);
+							break;
+						case 7:
+							R8_UART0_LCR &= ~(0b11);
+							SAFEOPERATE;
+							R8_UART0_LCR |= (0b10);
+							break;
+						case 8:
+							R8_UART0_LCR |= (0b11);
+							break;
+						}
+					}
+					break;
+				}
 			} break;
 
 			case UIS_TOKEN_OUT | 1: {
@@ -565,10 +667,30 @@ void USB_DevTransProcess(void)
 						break;
 
 					case DEF_USB_SET_LINE_CODING:
+						usbdev_set_line_coding_pending =
+							(pSetupReqPak->wIndex &
+							 0xFF);
 						len = 0;
 						break;
 					case DEF_USB_GET_LINE_CODING:
 						len = 0;
+						switch (pSetupReqPak->wIndex &
+							0xFF) {
+						case 0:
+							len = sizeof(
+								usbdev_acm_0_line_coding);
+							memcpy(pEP0_DataBuf,
+							       &usbdev_acm_0_line_coding,
+							       len);
+							break;
+						case 2:
+							len = sizeof(
+								usbdev_acm_1_line_coding);
+							memcpy(pEP0_DataBuf,
+							       &usbdev_acm_1_line_coding,
+							       len);
+							break;
+						}
 						break;
 					case DEF_USB_SET_LINE_STATE:
 						len = 0;
@@ -1176,6 +1298,16 @@ void USB_IRQHandler(void) /* USB中断服务程序,使用寄存器组1 */
 
 void usbdev_init(void)
 {
+	usbdev_acm_0_line_coding.dwDTERate = (12 * 1000 * 1000);
+	usbdev_acm_0_line_coding.bDataBits = 8;
+	usbdev_acm_0_line_coding.bParityType = 0;
+	usbdev_acm_0_line_coding.bCharFormat = 0;
+
+	usbdev_acm_1_line_coding.dwDTERate = 1200;
+	usbdev_acm_1_line_coding.bDataBits = 8;
+	usbdev_acm_1_line_coding.bParityType = 0;
+	usbdev_acm_1_line_coding.bCharFormat = 0;
+
 	pEP0_RAM_Addr = EP0_Databuf;
 	R8_USB_CTRL = 0x00; // 先设定模式,取消 RB_UC_CLR_ALL
 
