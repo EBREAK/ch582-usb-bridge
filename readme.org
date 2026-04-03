@@ -3,6 +3,8 @@
 
 ** UART SUPPORT
 
+ON USB CDC ACM1 (INTERFACE 2 AND 3)
+
 1. HARDWARE FLOW CONTROL USE RTS/CTS
 
 2. PARITY NONE/ODD/EVEN/SPACE/MARK
@@ -36,6 +38,18 @@ transmission stopping. The FT232BM drives RTS# high when the available buffer sp
 drops below 32 bytes. This allows the MCU / logic to continue to send up to 30 characters to the FT232BM
 after RTS# goes high without causing buffer over-run.
 #+END_SRC
+
+** FORTH CONSOLE
+
+I MAKE A FORTH ON USB CDC ACM0 (INTERFACE 0 AND 1)
+
+YOU CAN WRITE SIMPLE CODE CONTROL THE GPIO OR CHANGE UART0 TX PIN DRIVE LEVEL OR OTHER COMPLEX TASK ONLINE
+
+*** FEATURE
+
+1. MULTIASK SUPPORT
+
+2. OPTIMIZED BY SIZE, 32BIT FORTH USE 16BIT XT
 
 ** LICENSE
 
