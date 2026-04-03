@@ -47,14 +47,29 @@ void uart0_task(void)
 
 void uart1_task(void)
 {
+	int forth_taskidx;
 	if (R8_UART1_TFC == 0) {
-		if (forth_root.wait_state == FORTH_WAIT_EARLY_EMIT) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_EARLY_EMIT) {
+					tmos_set_event(forth_tasks[forth_taskidx]->taskid, FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 	if (fifo8_num_used(&uart1_rxfifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_EARLY_KEY) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_EARLY_KEY) {
+					tmos_set_event(forth_tasks[forth_taskidx]->taskid, FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 }

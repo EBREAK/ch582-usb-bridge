@@ -9,6 +9,38 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
+__aligned(4) uint32_t forth_dp = (uint32_t)&FORTH_RAM_START[0];
+
+struct forth_context *forth_tasks[FORTH_TASK_MAX];
+
+int forth_task_find_by_id(uint8_t taskid)
+{
+	int ret;
+	ret = 0;
+	while (ret < FORTH_TASK_MAX) {
+		if (forth_tasks[ret]->taskid == taskid) {
+			return ret;
+		}
+		ret += 1;
+	}
+	return -ENOENT;
+}
+
+int forth_task_find_free(void)
+{
+	int ret;
+	ret = 0;
+	while (ret < FORTH_TASK_MAX) {
+		if (forth_tasks[ret] == NULL) {
+			return ret;
+		}
+		ret += 1;
+	}
+	return -ENOSPC;
+}
+
 
 __aligned(4) uint16_t FORTH_CONTEXT[FORTH_CONTEXT_SIZE];
 
@@ -48,6 +80,66 @@ static inline uint32_t xt2addr(uint16_t xt)
 	return ((uint32_t)&FORTH_ROM_START[0] + (uint32_t)xt);
 }
 
+uint16_t Forth_ProcessEvent(uint8_t task_id, uint16_t events)
+{
+	if (events & SYS_EVENT_MSG) {
+		uint8_t *pMsg;
+
+		if ((pMsg = tmos_msg_receive(main_taskid)) != NULL) {
+			// Release the TMOS message
+			tmos_msg_deallocate(pMsg);
+		}
+		// return unprocessed events
+		return (events ^ SYS_EVENT_MSG);
+	}
+
+	if (events & FORTH_EVT_START) {
+		tmos_set_event(task_id, FORTH_EVT_RUN);
+		return (events ^ FORTH_EVT_START);
+	}
+
+	if (events & FORTH_EVT_RUN) {
+		int forth_taskidx;
+		forth_taskidx = forth_task_find_by_id(task_id);
+		if (forth_taskidx >= 0) {
+			forth_run(forth_tasks[forth_taskidx]);
+		}
+		return (events ^ FORTH_EVT_RUN);
+	}
+
+	return 0;
+}
+
+struct forth_context *forth_task_new(uint32_t ip)
+{
+	int forth_taskidx;
+	forth_taskidx = forth_task_find_free();
+	if (forth_taskidx < 0) {
+		return NULL;
+	}
+	struct forth_context *fctx;
+	forth_dp += 3;
+	forth_dp &= -4;
+	fctx = (void *)forth_dp;
+	forth_dp += sizeof(struct forth_context);
+	memcpy(fctx, &forth_root, sizeof(struct forth_context));
+	forth_dp += 3;
+	forth_dp &= -4;
+	forth_dp += (FORTH_STACK_DEPTH * 4);
+	fctx->ps0 = forth_dp;
+	fctx->psp = fctx->ps0;
+	forth_dp += (FORTH_STACK_DEPTH * 4);
+	fctx->rs0 = forth_dp;
+	fctx->rsp = fctx->rs0;
+	fctx->tos = FORTH_TOS_INIT;
+	fctx->sta = 0;
+	fctx->ip = ip;
+	fctx->taskid = TMOS_ProcessEventRegister(Forth_ProcessEvent);
+	forth_tasks[forth_taskidx] = fctx;
+	tmos_set_event(fctx->taskid, FORTH_EVT_START);
+	return fctx;
+}
+
 void forth_init(void)
 {
 	FORTH_CONTEXT[0] = XT_USER_LATEST;
@@ -55,6 +147,10 @@ void forth_init(void)
 	forth_root.xt_emit = XT_EARLY_EMIT;
 	forth_root.xt_key = XT_EARLY_KEY;
 	forth_root.xt_dot = XT_HEXDOT;
+	forth_root.taskid = TMOS_ProcessEventRegister(Forth_ProcessEvent);
+	forth_tasks[0] = &forth_root;
+	tmos_set_event(forth_root.taskid, FORTH_EVT_START);
+
 	debug_puts("FORTH RAM START: ");
 	debug_puthex((uint32_t)&FORTH_RAM_START[0]);
 	debug_cr();
@@ -933,7 +1029,7 @@ forth_wait_acm1_key:
 		break;
 	case F_TICK_DELAY:
 		utmp0 = fctx->tos;
-		tmos_start_task(main_taskid, MAIN_EVT_FORTH, utmp0);
+		tmos_start_task(fctx->taskid, FORTH_EVT_RUN, utmp0);
 		fctx->save = &&forth_wait_tick_delay;
 		fctx->wait_state = FORTH_WAIT_TICK_DELAY;
 		return;
@@ -941,6 +1037,21 @@ forth_wait_tick_delay:
 		fctx->tos = forth_ppop(fctx);
 		fctx->save = NULL;
 		fctx->wait_state = 0;
+		break;
+	case F_TICK_COUNT:
+		forth_ppush(fctx, fctx->tos);
+		fctx->tos = TMOS_GetSystemClock();
+		break;
+	case F_DP:
+		forth_ppush(fctx, fctx->tos);
+		fctx->tos = (uint32_t)&forth_dp;
+		break;
+	case F_TOBODY:
+		fctx->tos = xt2addr(fctx->tos);
+		fctx->tos += 2;
+		break;
+	case F_TASK_NEW:
+		fctx->tos = (uint32_t)forth_task_new(fctx->tos);
 		break;
 	default:
 		debug_puts("INVALID OPCODE\r\n");

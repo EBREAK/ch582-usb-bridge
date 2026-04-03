@@ -1365,6 +1365,7 @@ void usbdev_task(void)
 	}
 #endif
 	if (EP1_GetINSta()) {
+		static uint8_t ep1_prev_in_len = 0; // ZLP
 		idx = 0;
 		while (idx < 8) {
 			if (fifo8_pop(&usbdev_acm_0_d2h_fifo,
@@ -1373,13 +1374,15 @@ void usbdev_task(void)
 			}
 			idx += 1;
 		}
-		if (idx > 0) {
+		if ((idx > 0) || (ep1_prev_in_len == 8)) {
 			DevEP1_IN_Deal(idx);
+			ep1_prev_in_len = idx;
 			cdc_acm_0_d2h_total += idx;
 		}
 	}
 
 	if (EP5_GetINSta()) {
+		static uint8_t ep5_prev_in_len = 0; // ZLP
 		idx = 0;
 		while (idx < 64) {
 			if (fifo8_pop(&usbdev_acm_1_d2h_fifo,
@@ -1388,8 +1391,9 @@ void usbdev_task(void)
 			}
 			idx += 1;
 		}
-		if (idx > 0) {
+		if ((idx > 0) || (ep5_prev_in_len == 64)) {
 			DevEP5_IN_Deal(idx);
+			ep5_prev_in_len = idx;
 			cdc_acm_1_d2h_total += idx;
 		}
 	}
@@ -1405,24 +1409,66 @@ void usbdev_task(void)
 		R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
 		R8_UEP6_CTRL |= UEP_R_RES_ACK;
 	}
+	int forth_taskidx;
+
 	if (fifo8_num_used(&usbdev_acm_0_h2d_fifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_ACM0_KEY) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_ACM0_KEY) {
+					tmos_set_event(
+						forth_tasks[forth_taskidx]
+							->taskid,
+						FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 	if (fifo8_num_free(&usbdev_acm_0_d2h_fifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_ACM0_EMIT) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_ACM0_EMIT) {
+					tmos_set_event(
+						forth_tasks[forth_taskidx]
+							->taskid,
+						FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 	if (fifo8_num_used(&usbdev_acm_1_h2d_fifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_ACM1_KEY) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_ACM1_KEY) {
+					tmos_set_event(
+						forth_tasks[forth_taskidx]
+							->taskid,
+						FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 	if (fifo8_num_free(&usbdev_acm_1_d2h_fifo) > 0) {
-		if (forth_root.wait_state == FORTH_WAIT_ACM1_EMIT) {
-			tmos_set_event(main_taskid, MAIN_EVT_FORTH);
+		forth_taskidx = 0;
+		while (forth_taskidx < FORTH_TASK_MAX) {
+			if (forth_tasks[forth_taskidx] != NULL) {
+				if (forth_tasks[forth_taskidx]->wait_state ==
+				    FORTH_WAIT_ACM1_EMIT) {
+					tmos_set_event(
+						forth_tasks[forth_taskidx]
+							->taskid,
+						FORTH_EVT_RUN);
+				}
+			}
+			forth_taskidx += 1;
 		}
 	}
 }

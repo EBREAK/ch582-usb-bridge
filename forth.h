@@ -5,6 +5,9 @@
 
 #include "FORTH_DEFS.H"
 
+#define FORTH_EVT_START (1 << 0)
+#define FORTH_EVT_RUN (1 << 1)
+
 #define FORTH_STA_HALT (1 << 31)
 #define FORTH_STA_DBG (1 << 30)
 #define FORTH_STA_COMPILE (1 << 29)
@@ -17,7 +20,7 @@ struct forth_context {
 	uint32_t ps0;
 	uint32_t rsp;
 	uint32_t rs0;
-	uint32_t sta;
+	volatile uint32_t sta;
 	uint32_t tib;
 	uint8_t tin;
 	uint16_t xt_emit;
@@ -26,6 +29,7 @@ struct forth_context {
 
 	uint16_t wait_state;
 	void *save;
+	uint8_t taskid;
 };
 
 enum {
@@ -66,9 +70,7 @@ static inline void forth_rpush(struct forth_context *fctx, uint32_t v)
 	*(uint32_t *)fctx->rsp = v;
 }
 
-
-
-
+extern struct forth_context *forth_tasks[FORTH_TASK_MAX];
 extern struct forth_context forth_root;
 extern void forth_init(void);
 extern void forth_run(struct forth_context *fctx);

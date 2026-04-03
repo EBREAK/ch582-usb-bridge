@@ -6,6 +6,7 @@
 #define FORTH_RAM_SIZE (4 * 1024)
 #define FORTH_CONTEXT_SIZE 8
 #define FORTH_NLEN_MASK 0x1F
+#define FORTH_TASK_MAX 8
 
 #define F_NOOP 0X0
 #define F_HALT 0X1
@@ -142,5 +143,10 @@
 #define F_SW_RESET 0X74
 #define F_PW_RESET 0x75
 #define F_TICK_DELAY 0x76
+#define F_TICK_COUNT 0x77
+
+#define F_DP 0x78
+#define F_TOBODY 0x79
+#define F_TASK_NEW 0x7A
 
 #endif

@@ -35,7 +35,6 @@ uint16_t Main_ProcessEvent(uint8_t task_id, uint16_t events)
 
 	if (events & MAIN_EVT_START) {
 		tmos_start_task(main_taskid, MAIN_EVT_PERIODIC1S, 1600);
-		tmos_start_task(main_taskid, MAIN_EVT_FORTH, 1);
 		return (events ^ MAIN_EVT_START);
 	}
 
@@ -43,11 +42,6 @@ uint16_t Main_ProcessEvent(uint8_t task_id, uint16_t events)
 		usbdev_show_stat();
 		tmos_start_task(main_taskid, MAIN_EVT_PERIODIC1S, 1600);
 		return (events ^ MAIN_EVT_PERIODIC1S);
-	}
-
-	if (events & MAIN_EVT_FORTH) {
-		forth_run(&forth_root);
-		return (events ^ MAIN_EVT_FORTH);
 	}
 
 	return 0;
