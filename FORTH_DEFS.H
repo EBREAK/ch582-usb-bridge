@@ -141,5 +141,6 @@
 
 #define F_SW_RESET 0X74
 #define F_PW_RESET 0x75
+#define F_TICK_DELAY 0x76
 
 #endif

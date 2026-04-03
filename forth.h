@@ -35,6 +35,7 @@ enum {
 	FORTH_WAIT_ACM0_KEY = 4,
 	FORTH_WAIT_ACM1_EMIT = 5,
 	FORTH_WAIT_ACM1_KEY = 6,
+	FORTH_WAIT_TICK_DELAY = 7,
 };
 
 static inline uint32_t forth_ppop(struct forth_context *fctx)

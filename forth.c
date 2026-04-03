@@ -2,6 +2,8 @@
 #include "debug.h"
 #include "uart.h"
 #include "usbdev.h"
+#include "main.h"
+#include "config.h"
 
 #include <CH58x_common.h>
 #include <ctype.h>
@@ -928,6 +930,17 @@ forth_wait_acm1_key:
 		sys_safe_access_disable();
 		while (1)
 			;
+		break;
+	case F_TICK_DELAY:
+		utmp0 = fctx->tos;
+		tmos_start_task(main_taskid, MAIN_EVT_FORTH, utmp0);
+		fctx->save = &&forth_wait_tick_delay;
+		fctx->wait_state = FORTH_WAIT_TICK_DELAY;
+		return;
+forth_wait_tick_delay:
+		fctx->tos = forth_ppop(fctx);
+		fctx->save = NULL;
+		fctx->wait_state = 0;
 		break;
 	default:
 		debug_puts("INVALID OPCODE\r\n");
