@@ -75,6 +75,7 @@ all:
 	$(OC) -O binary $(FW_NAME).elf $(FW_NAME).bin
 	$(SZ) $(FW_NAME).elf
 	./host/mkhdr.exe $(FW_NAME).bin
+	$(OC) -I binary -O ihex --adjust-vma=0x8000 $(FW_NAME).bin $(FW_NAME).hex
 	cp $(FW_NAME).bin $(FW_NAME)_enc.bin
 	./host/fwenc.exe $(FW_NAME)_enc.bin
 
@@ -91,4 +92,4 @@ patch:
 		$(CH583_SDK)/SRC/StdPeriphDriver/CH58x_sys.c 
 
 flash:
-	wlink flash -a 0x8000 $(FW_NAME).bin
+	wlink flash $(FW_NAME).hex
