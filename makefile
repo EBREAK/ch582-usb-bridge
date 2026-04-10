@@ -67,6 +67,7 @@ SRCS += \
 	main.c \
 
 CFLAGS += \
+	-DFREQ_SYS=80000000 \
 	-DINT_SOFT \
 
 all:
