@@ -61,7 +61,7 @@ struct fifo8 usbdev_acm_0_d2h_fifo = {
 	.tail = 0,
 };
 
-#define USBDEV_ACM_1_H2D_BUFSIZE (0x7F + 1)
+#define USBDEV_ACM_1_H2D_BUFSIZE (0xFF + 1)
 
 __aligned(4) uint8_t usbdev_acm_1_h2d_fifo_buf[USBDEV_ACM_1_H2D_BUFSIZE];
 struct fifo8 usbdev_acm_1_h2d_fifo = {
@@ -1260,9 +1260,9 @@ void DevEP2_OUT_Deal(uint8_t len)
 		idx += 1;
 	}
 
-	if (fifo8_num_free(&usbdev_acm_0_h2d_fifo) < 8) {
+	if (fifo8_num_free(&usbdev_acm_0_h2d_fifo) < (8 * 2)) {
 		cdc_acm_0_h2d_pause = true;
-		R8_UEP2_CTRL &= ~UEP_R_RES_STALL;
+		//R8_UEP2_CTRL &= ~UEP_R_RES_STALL;
 		R8_UEP2_CTRL |= UEP_R_RES_NAK;
 	}
 	cdc_acm_0_h2d_total += len;
@@ -1276,9 +1276,9 @@ void DevEP6_OUT_Deal(uint8_t len)
 		idx += 1;
 	}
 
-	if (fifo8_num_free(&usbdev_acm_1_h2d_fifo) < 64) {
+	if (fifo8_num_free(&usbdev_acm_1_h2d_fifo) < (64 * 2)) {
 		cdc_acm_1_h2d_pause = true;
-		R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
+		//R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
 		R8_UEP6_CTRL |= UEP_R_RES_NAK;
 	}
 	cdc_acm_1_h2d_total += len;
@@ -1397,17 +1397,21 @@ void usbdev_task(void)
 			cdc_acm_1_d2h_total += idx;
 		}
 	}
-	if ((fifo8_num_free(&usbdev_acm_0_h2d_fifo) > 8) &&
+	if ((fifo8_num_free(&usbdev_acm_0_h2d_fifo) > (8 * 2)) &&
 	    (cdc_acm_0_h2d_pause == true)) {
 		cdc_acm_0_h2d_pause = false;
+		PFIC_DisableIRQ(USB_IRQn);
 		R8_UEP2_CTRL &= ~UEP_R_RES_STALL;
 		R8_UEP2_CTRL |= UEP_R_RES_ACK;
+		PFIC_EnableIRQ(USB_IRQn);
 	}
-	if ((fifo8_num_free(&usbdev_acm_1_h2d_fifo) > 64) &&
+	if ((fifo8_num_free(&usbdev_acm_1_h2d_fifo) > (64 * 2)) &&
 	    (cdc_acm_1_h2d_pause == true)) {
 		cdc_acm_1_h2d_pause = false;
+		PFIC_DisableIRQ(USB_IRQn);
 		R8_UEP6_CTRL &= ~UEP_R_RES_STALL;
 		R8_UEP6_CTRL |= UEP_R_RES_ACK;
+		PFIC_EnableIRQ(USB_IRQn);
 	}
 	int forth_taskidx;
 
