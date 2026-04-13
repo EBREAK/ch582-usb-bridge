@@ -105,10 +105,11 @@ void uart_init(void)
 	GPIOB_SetBits(bTXD0);
 	GPIOB_ModeCfg(bTXD0, GPIO_ModeOut_PP_5mA);
 	GPIOB_ModeCfg(bRXD0, GPIO_ModeIN_PU);
+	GPIOB_ResetBits(bRTS);
 	GPIOB_ModeCfg(bRTS, GPIO_ModeOut_PP_5mA);
 	GPIOB_ModeCfg(bCTS, GPIO_ModeIN_PD);
 	UART0_BaudRateCfg(1200);
-	R8_UART0_MCR |= RB_MCR_AU_FLOW_EN;
+	R8_UART0_MCR |= RB_MCR_AU_FLOW_EN | RB_MCR_RTS;
 	R8_UART0_FCR = (2 << 6) | RB_FCR_TX_FIFO_CLR | RB_FCR_RX_FIFO_CLR |
 		       RB_FCR_FIFO_EN; // FIFO打开，触发点4字节
 	R8_UART0_LCR = RB_LCR_WORD_SZ;
