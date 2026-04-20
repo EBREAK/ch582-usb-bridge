@@ -428,10 +428,12 @@ void USB_DevTransProcess(void)
 				len = R8_USB_RX_LEN;
 				switch (usbdev_set_line_coding_pending) {
 				case 0:
+					usbdev_set_line_coding_pending = 0xFF;
 					memcpy(&usbdev_acm_0_line_coding,
 					       pEP0_DataBuf, 7);
 					break;
 				case 2:
+					usbdev_set_line_coding_pending = 0xFF;
 					memcpy(&usbdev_acm_1_line_coding,
 					       pEP0_DataBuf, 7);
 					if (usbdev_acm_1_mode ==
